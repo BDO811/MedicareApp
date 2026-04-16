@@ -1,0 +1,1167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BenefitsGuide — Medicaid Renewal</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        primary: '#1B4D8E',
+        accent: '#2E8B5A',
+        bg: '#F8FAFC',
+        error: '#DC2626'
+      }
+    }
+  }
+}
+</script>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 16px; background: #F8FAFC; }
+  .tooltip-box { display: none; position: absolute; z-index: 50; background: #1e293b; color: white; padding: 10px 14px; border-radius: 8px; font-size: 13px; max-width: 280px; line-height: 1.5; box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
+  .tooltip-wrap:hover .tooltip-box, .tooltip-wrap.active .tooltip-box { display: block; }
+  .field-error { border-color: #DC2626 !important; }
+  .error-msg { color: #DC2626; font-size: 13px; margin-top: 4px; display: none; }
+  .error-msg.show { display: block; }
+  input, select, textarea { min-height: 44px; font-size: 16px; }
+  .progress-fill { transition: width 0.4s ease; }
+  .step-card { animation: fadeIn 0.3s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #2E8B5A; color: white; padding: 12px 24px; border-radius: 8px; font-size: 14px; z-index: 100; box-shadow: 0 4px 16px rgba(0,0,0,0.2); opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+  @media print { .no-print { display: none !important; } body { background: white; } }
+</style>
+</head>
+<body class="min-h-screen bg-bg">
+
+<!-- Toast notification -->
+<div id="toast" class="toast">Progress saved</div>
+
+<!-- App container -->
+<div id="app" class="max-w-2xl mx-auto px-4 pb-16">
+
+  <!-- Header -->
+  <div class="no-print sticky top-0 z-40 bg-bg pt-4 pb-2">
+    <!-- Mode switcher -->
+    <div class="flex gap-2 mb-3">
+      <button onclick="setMode('renewal')" id="tab-renewal" class="flex-1 py-2 rounded-lg text-sm font-semibold border-2 transition-all">Medicaid Renewal</button>
+      <button onclick="setMode('work')" id="tab-work" class="flex-1 py-2 rounded-lg text-sm font-semibold border-2 transition-all">Work Requirements</button>
+    </div>
+    <!-- Progress bar -->
+    <div id="progress-bar-wrap" class="bg-white rounded-xl shadow-sm p-3">
+      <div class="flex justify-between items-center mb-2">
+        <span id="step-label" class="text-sm font-semibold text-primary"></span>
+        <span id="step-counter" class="text-xs text-gray-500"></span>
+      </div>
+      <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
+        <div id="progress-fill" class="progress-fill h-full rounded-full bg-primary" style="width:0%"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step content -->
+  <div id="step-content" class="mt-4"></div>
+
+  <!-- Navigation -->
+  <div id="nav-btns" class="no-print flex gap-3 mt-6">
+    <button id="btn-back" onclick="goBack()" class="flex-1 py-3 rounded-xl border-2 border-primary text-primary font-semibold text-base hidden">← Back</button>
+    <button id="btn-continue" onclick="goContinue()" class="flex-1 py-3 rounded-xl bg-primary text-white font-semibold text-base shadow">Continue →</button>
+  </div>
+
+</div>
+
+<script>
+// ============================================================
+// STATE
+// ============================================================
+let appMode = 'renewal'; // 'renewal' or 'work'
+let currentStep = 0;
+
+const state = {
+  renewal: {
+    // S2: Contact
+    firstName:'', middleName:'', lastName:'', suffix:'',
+    homeStreet:'', homeApt:'', homeCity:'', homeState:'', homeZip:'',
+    mailSameAsHome: true,
+    mailStreet:'', mailApt:'', mailCity:'', mailState:'', mailZip:'',
+    phoneType:'cell', phoneNumber:'',
+    phone2:'', email:'',
+    // S3: Tax
+    filesTaxes:'',
+    taxFiler1Name:'', taxFiler1Joint:'', taxFiler1Spouse:'', taxFiler1Deps:'',
+    taxFiler2Name:'', taxFiler2Joint:'', taxFiler2Spouse:'', taxFiler2Deps:'',
+    claimedDependent:'', claimedDepFiler:'', claimedDepNames:'',
+    // S4: Current Medicaid members
+    medicaidMembers: [{ name:'', ssnKnown:'yes', ssn1:'', ssn2:'', ssn3:'', noLonger:false, immigrant:'no', docType:'', docId:'' }],
+    // S5: Other household members
+    otherMembers: [],
+    // S6: Other insurance
+    insurances: [],
+    jobOffered: false, stateEmployee: false,
+    // S7: Special circumstances
+    sc_limitWork:false, sc_limitWorkNames:'',
+    sc_longTermCare:false, sc_longTermCareNames:'',
+    sc_blind:false, sc_blindNames:'',
+    sc_student:false, sc_studentNames:'',
+    sc_foster:false, sc_fosterNames:'',
+    sc_pregnant:false, sc_pregnantNames:'', sc_pregnantBabies:'',
+    sc_native:false, sc_nativeNames:'',
+    // S8: Employment
+    jobs: [],
+    jobChange:false, jobChangeName:'', jobChangeWhat:'',
+    selfEmployed: [],
+    // S9: Other income
+    otherIncome: [],
+    alimonyPaid:'', studentLoanInt:'', otherDeductions:'',
+    variableIncome:'',
+    // S10: Signature
+    taxPermission:'1',
+    sigName:'', sigDate: new Date().toLocaleDateString('en-US'),
+  },
+  work: {
+    firstName:'', lastName:'', address:'', city:'', state:'', zip:'',
+    phone:'', email:'',
+    empStatus:'',
+    empName:'', empAddress:'', empHours:'', empWage:'',
+    searches: [],
+    exemption:'',
+    sigName:'', sigDate: new Date().toLocaleDateString('en-US'),
+  }
+};
+
+// ============================================================
+// STEPS DEFINITIONS
+// ============================================================
+const renewalSteps = [
+  'welcome', 'contact', 'tax', 'medicaid_members',
+  'other_members', 'insurance', 'special', 'employment',
+  'other_income', 'signature', 'confirmation'
+];
+
+const workSteps = ['work_welcome','work_contact','work_employment','work_signature','work_confirmation'];
+
+function getSteps() {
+  return appMode === 'renewal' ? renewalSteps : workSteps;
+}
+
+// ============================================================
+// UTILITIES
+// ============================================================
+function $(id) { return document.getElementById(id); }
+
+function showToast(msg='Progress saved') {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+function saveToStorage() {
+  try {
+    localStorage.setItem('benefitsguide_state', JSON.stringify(state));
+    localStorage.setItem('benefitsguide_mode', appMode);
+    localStorage.setItem('benefitsguide_step', currentStep);
+  } catch(e) {}
+}
+
+function loadFromStorage() {
+  try {
+    const s = localStorage.getItem('benefitsguide_state');
+    const m = localStorage.getItem('benefitsguide_mode');
+    const st = localStorage.getItem('benefitsguide_step');
+    if (s) Object.assign(state, JSON.parse(s));
+    if (m) appMode = m;
+    if (st) currentStep = parseInt(st) || 0;
+  } catch(e) {}
+}
+
+function tooltipHtml(text) {
+  return `<span class="tooltip-wrap relative inline-block ml-1 cursor-pointer" onclick="this.classList.toggle('active')">
+    <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 text-primary text-xs font-bold">?</span>
+    <span class="tooltip-box">${text}</span>
+  </span>`;
+}
+
+function sectionTitle(title, tip='') {
+  return `<h2 class="text-xl font-bold text-primary mb-1">${title}${tip ? tooltipHtml(tip) : ''}</h2>`;
+}
+
+function fieldWrap(label, inputHtml, id='', hint='', required=false) {
+  return `<div class="mb-4">
+    <label class="block text-sm font-semibold text-gray-700 mb-1">${label}${required?'<span class="text-error ml-1">*</span>':''}</label>
+    ${hint ? `<p class="text-xs text-gray-500 mb-1">${hint}</p>` : ''}
+    ${inputHtml}
+    ${id ? `<p class="error-msg" id="err-${id}">This field is required.</p>` : ''}
+  </div>`;
+}
+
+function textInput(id, placeholder='', value='', extraClass='') {
+  return `<input type="text" id="${id}" value="${escHtml(value)}" placeholder="${placeholder}"
+    oninput="syncField('${id}')"
+    class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none ${extraClass}">`;
+}
+
+function selectInput(id, options, value='') {
+  const opts = options.map(([v,l]) => `<option value="${v}"${value===v?' selected':''}>${l}</option>`).join('');
+  return `<select id="${id}" onchange="syncField('${id}')" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none bg-white">${opts}</select>`;
+}
+
+function radioGroup(name, options, value='', onchange='') {
+  return options.map(([v,l]) => `
+    <label class="flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer ${value===v?'border-primary bg-blue-50':'border-gray-200'} mb-2">
+      <input type="radio" name="${name}" value="${v}" ${value===v?'checked':''} onchange="${onchange||`syncRadio('${name}',this.value)`}" class="w-4 h-4 accent-primary">
+      <span class="text-sm font-medium text-gray-700">${l}</span>
+    </label>`).join('');
+}
+
+function checkboxInput(id, label, checked=false, onchange='') {
+  return `<label class="flex items-start gap-3 cursor-pointer">
+    <input type="checkbox" id="${id}" ${checked?'checked':''} onchange="${onchange||`syncCheck('${id}')`}" class="mt-1 w-4 h-4 accent-primary flex-shrink-0">
+    <span class="text-sm text-gray-700">${label}</span>
+  </label>`;
+}
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ============================================================
+// STATE SYNC HELPERS
+// ============================================================
+function syncField(id) {
+  const el = $(id);
+  if (!el) return;
+  const path = id.split('__');
+  const r = appMode === 'renewal' ? state.renewal : state.work;
+  if (path.length === 1) { r[id] = el.value; }
+  else if (path.length === 3) {
+    // e.g. medicaidMembers__0__name
+    const [arr, idx, key] = path;
+    if (r[arr] && r[arr][parseInt(idx)]) r[arr][parseInt(idx)][key] = el.value;
+  }
+  autoSave();
+}
+
+function syncRadio(name, value) {
+  const r = appMode === 'renewal' ? state.renewal : state.work;
+  r[name] = value;
+  autoSave();
+  renderCurrentStep();
+}
+
+function syncCheck(id) {
+  const el = $(id);
+  if (!el) return;
+  const r = appMode === 'renewal' ? state.renewal : state.work;
+  r[id] = el.checked;
+  autoSave();
+  renderCurrentStep();
+}
+
+let saveTimer = null;
+function autoSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => { saveToStorage(); showToast('Progress saved'); }, 1200);
+}
+
+// ============================================================
+// MODE
+// ============================================================
+function setMode(mode) {
+  appMode = mode;
+  currentStep = 0;
+  updateTabs();
+  renderCurrentStep();
+}
+
+function updateTabs() {
+  const renewal = $('tab-renewal'), work = $('tab-work');
+  if (appMode === 'renewal') {
+    renewal.className = 'flex-1 py-2 rounded-lg text-sm font-semibold border-2 border-primary bg-primary text-white transition-all';
+    work.className = 'flex-1 py-2 rounded-lg text-sm font-semibold border-2 border-gray-300 text-gray-600 transition-all';
+  } else {
+    work.className = 'flex-1 py-2 rounded-lg text-sm font-semibold border-2 border-primary bg-primary text-white transition-all';
+    renewal.className = 'flex-1 py-2 rounded-lg text-sm font-semibold border-2 border-gray-300 text-gray-600 transition-all';
+  }
+}
+
+// ============================================================
+// NAVIGATION
+// ============================================================
+function goBack() {
+  if (currentStep > 0) { currentStep--; renderCurrentStep(); window.scrollTo(0,0); }
+}
+
+function goContinue() {
+  if (!validateCurrentStep()) return;
+  const steps = getSteps();
+  if (currentStep < steps.length - 1) {
+    currentStep++;
+    saveToStorage();
+    renderCurrentStep();
+    window.scrollTo(0,0);
+  }
+}
+
+function updateNav() {
+  const steps = getSteps();
+  const back = $('btn-back'), cont = $('btn-continue'), nav = $('nav-btns');
+  const isLast = currentStep === steps.length - 1;
+  const isFirst = currentStep === 0;
+  if (isLast) { nav.style.display = 'none'; } else { nav.style.display = 'flex'; }
+  if (isFirst) back.classList.add('hidden'); else back.classList.remove('hidden');
+  if (currentStep === steps.length - 2) {
+    cont.textContent = 'Submit →';
+    cont.className = 'flex-1 py-3 rounded-xl bg-accent text-white font-semibold text-base shadow';
+  } else {
+    cont.textContent = 'Continue →';
+    cont.className = 'flex-1 py-3 rounded-xl bg-primary text-white font-semibold text-base shadow';
+  }
+}
+
+function updateProgress() {
+  const steps = getSteps();
+  const total = steps.length;
+  const pct = Math.round((currentStep / (total-1)) * 100);
+  const stepNames = appMode === 'renewal'
+    ? ['Welcome','Contact','Tax Filing','Current Members','Other Members','Insurance','Special Circumstances','Employment','Other Income','Signature','Done']
+    : ['Welcome','Contact Info','Employment','Signature','Done'];
+  $('step-label').textContent = stepNames[currentStep] || '';
+  $('step-counter').textContent = `Step ${currentStep+1} of ${total}`;
+  $('progress-fill').style.width = pct + '%';
+}
+
+// ============================================================
+// VALIDATION
+// ============================================================
+function validateCurrentStep() {
+  const steps = getSteps();
+  const step = steps[currentStep];
+  const r = appMode === 'renewal' ? state.renewal : state.work;
+  let ok = true;
+
+  function require(id) {
+    const el = $(id);
+    const errEl = $('err-'+id);
+    if (!el) return;
+    const val = el.value.trim();
+    if (!val) {
+      el.classList.add('field-error');
+      if (errEl) errEl.classList.add('show');
+      ok = false;
+    } else {
+      el.classList.remove('field-error');
+      if (errEl) errEl.classList.remove('show');
+    }
+  }
+
+  if (step === 'contact') {
+    ['firstName','lastName','homeStreet','homeCity','homeState','homeZip','phoneNumber'].forEach(require);
+  }
+  if (step === 'signature') {
+    require('sigName');
+  }
+  if (step === 'work_contact') {
+    ['firstName','lastName','address','phone'].forEach(require);
+  }
+  if (step === 'work_signature') {
+    require('sigName');
+  }
+
+  if (!ok) {
+    document.querySelector('.field-error')?.scrollIntoView({ behavior:'smooth', block:'center' });
+  }
+  return ok;
+}
+
+// ============================================================
+// RENDER ROUTER
+// ============================================================
+function renderCurrentStep() {
+  updateProgress();
+  updateNav();
+  const steps = getSteps();
+  const step = steps[currentStep];
+  const el = $('step-content');
+  el.innerHTML = renderStep(step);
+}
+
+function renderStep(step) {
+  switch(step) {
+    case 'welcome': return renderWelcome();
+    case 'contact': return renderContact();
+    case 'tax': return renderTax();
+    case 'medicaid_members': return renderMedicaidMembers();
+    case 'other_members': return renderOtherMembers();
+    case 'insurance': return renderInsurance();
+    case 'special': return renderSpecial();
+    case 'employment': return renderEmployment();
+    case 'other_income': return renderOtherIncome();
+    case 'signature': return renderSignature();
+    case 'confirmation': return renderConfirmation();
+    case 'work_welcome': return renderWorkWelcome();
+    case 'work_contact': return renderWorkContact();
+    case 'work_employment': return renderWorkEmployment();
+    case 'work_signature': return renderWorkSignature();
+    case 'work_confirmation': return renderWorkConfirmation();
+    default: return '<p>Unknown step</p>';
+  }
+}
+
+// ============================================================
+// STEP: WELCOME
+// ============================================================
+function renderWelcome() {
+  return `<div class="step-card bg-white rounded-2xl shadow-sm p-6">
+    <div class="text-center mb-6">
+      <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 mb-4">
+        <svg class="w-8 h-8 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+      </div>
+      <h1 class="text-3xl font-bold text-primary">BenefitsGuide</h1>
+      <p class="text-gray-600 mt-2 text-lg">Let's renew your Medicaid coverage — step by step</p>
+    </div>
+    <div class="bg-blue-50 rounded-xl p-4 mb-5">
+      <p class="text-sm text-gray-700 leading-relaxed">We'll walk you through your Medicaid renewal in plain language. This usually takes <strong>10–20 minutes</strong>. Your progress is saved automatically so you can come back anytime.</p>
+    </div>
+    <div class="mb-5">
+      <h3 class="font-semibold text-gray-800 mb-3">What you may need:</h3>
+      <ul class="space-y-2">
+        ${['Social Security Numbers for household members','Employer name, address, and phone number','Recent pay stubs or income amounts','Any other health insurance information'].map(i=>`
+          <li class="flex items-start gap-2 text-sm text-gray-700">
+            <svg class="w-4 h-4 text-accent mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+            ${i}
+          </li>`).join('')}
+      </ul>
+    </div>
+    <div class="bg-green-50 border border-green-200 rounded-xl p-3 mb-2">
+      <p class="text-xs text-green-800">Your information is kept private and secure. You can stop and return at any time — your answers will be saved.</p>
+    </div>
+  </div>`;
+}
+
+// ============================================================
+// STEP: CONTACT
+// ============================================================
+function renderContact() {
+  const r = state.renewal;
+  const usStates = [['','Select state'],['AL','Alabama'],['AK','Alaska'],['AZ','Arizona'],['AR','Arkansas'],['CA','California'],['CO','Colorado'],['CT','Connecticut'],['DE','Delaware'],['FL','Florida'],['GA','Georgia'],['HI','Hawaii'],['ID','Idaho'],['IL','Illinois'],['IN','Indiana'],['IA','Iowa'],['KS','Kansas'],['KY','Kentucky'],['LA','Louisiana'],['ME','Maine'],['MD','Maryland'],['MA','Massachusetts'],['MI','Michigan'],['MN','Minnesota'],['MS','Mississippi'],['MO','Missouri'],['MT','Montana'],['NE','Nebraska'],['NV','Nevada'],['NH','New Hampshire'],['NJ','New Jersey'],['NM','New Mexico'],['NY','New York'],['NC','North Carolina'],['ND','North Dakota'],['OH','Ohio'],['OK','Oklahoma'],['OR','Oregon'],['PA','Pennsylvania'],['RI','Rhode Island'],['SC','South Carolina'],['SD','South Dakota'],['TN','Tennessee'],['TX','Texas'],['UT','Utah'],['VT','Vermont'],['VA','Virginia'],['WA','Washington'],['WV','West Virginia'],['WI','Wisconsin'],['WY','Wyoming'],['DC','Washington DC']];
+
+  return `<div class="step-card bg-white rounded-2xl shadow-sm p-6">
+    ${sectionTitle('Contact Information', 'We need your contact information so we can reach you about your renewal. All fields marked * are required.')}
+    <div class="grid grid-cols-2 gap-3 mb-1">
+      <div class="col-span-2 sm:col-span-1">${fieldWrap('First Name',textInput('firstName','Jane',r.firstName),'firstName','',true)}</div>
+      <div class="col-span-2 sm:col-span-1">${fieldWrap('Middle Name',textInput('middleName','',r.middleName))}</div>
+      <div class="col-span-2 sm:col-span-1">${fieldWrap('Last Name',textInput('lastName','Doe',r.lastName),'lastName','',true)}</div>
+      <div class="col-span-2 sm:col-span-1">${fieldWrap('Suffix',selectInput('suffix',[['','None'],['Jr.','Jr.'],['Sr.','Sr.'],['II','II'],['III','III'],['IV','IV']],r.suffix))}</div>
+    </div>
+
+    <div class="border-t pt-4 mt-2">
+      <h3 class="font-semibold text-gray-700 mb-3">Home Address</h3>
+      ${fieldWrap('Street Address',textInput('homeStreet','123 Main St',r.homeStreet),'homeStreet','',true)}
+      ${fieldWrap('Apt / Unit',textInput('homeApt','Apt 2B',r.homeApt))}
+      <div class="grid grid-cols-2 gap-3">
+        <div class="col-span-2 sm:col-span-1">${fieldWrap('City',textInput('homeCity','',r.homeCity),'homeCity','',true)}</div>
+        <div>${fieldWrap('State',selectInput('homeState',usStates,r.homeState),'homeState','',true)}</div>
+        <div>${fieldWrap('ZIP Code',textInput('homeZip','',r.homeZip),'homeZip','',true)}</div>
+      </div>
+    </div>
+
+    <div class="border-t pt-4 mt-2">
+      <div class="mb-3">${checkboxInput('mailSameAsHome','Mailing address is the same as home address',r.mailSameAsHome,'syncCheck("mailSameAsHome")')}</div>
+      ${!r.mailSameAsHome ? `
+      <h3 class="font-semibold text-gray-700 mb-3">Mailing Address</h3>
+      ${fieldWrap('Street Address',textInput('mailStreet','',r.mailStreet))}
+      ${fieldWrap('Apt / Unit',textInput('mailApt','',r.mailApt))}
+      <div class="grid grid-cols-2 gap-3">
+        <div class="col-span-2 sm:col-span-1">${fieldWrap('City',textInput('mailCity','',r.mailCity))}</div>
+        <div>${fieldWrap('State',selectInput('mailState',usStates,r.mailState))}</div>
+        <div>${fieldWrap('ZIP Code',textInput('mailZip','',r.mailZip))}</div>
+      </div>` : ''}
+    </div>
+
+    <div class="border-t pt-4 mt-2">
+      <h3 class="font-semibold text-gray-700 mb-3">Phone & Email</h3>
+      <div class="mb-3">
+        <label class="block text-sm font-semibold text-gray-700 mb-2">Best phone type <span class="text-error">*</span></label>
+        ${radioGroup('phoneType',[['cell','Cell phone'],['home','Home phone'],['work','Work phone']],r.phoneType)}
+      </div>
+      ${fieldWrap('Phone Number',textInput('phoneNumber','(555) 555-5555',r.phoneNumber),'phoneNumber','',true)}
+      ${fieldWrap('Secondary Phone (optional)',textInput('phone2','',r.phone2))}
+      ${fieldWrap('Email Address (optional)',`<input type="email" id="email" value="${escHtml(r.email)}" placeholder="you@example.com" oninput="syncField('email')" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}
+    </div>
+  </div>`;
+}
+
+// ============================================================
+// STEP: TAX FILING
+// ============================================================
+function renderTax() {
+  const r = state.renewal;
+  return `<div class="step-card bg-white rounded-2xl shadow-sm p-6">
+    ${sectionTitle('Tax Filing', 'We ask about taxes to figure out what counts as income for your household. You can still renew Medicaid even if you don\'t file taxes.')}
+
+    <div class="mb-5">
+      <label class="block text-sm font-semibold text-gray-700 mb-2">Will anyone in your household file a federal tax return next year for income earned this year? <span class="text-error">*</span></label>
+      ${radioGroup('filesTaxes',[['yes','Yes'],['no','No']],r.filesTaxes,'syncRadio("filesTaxes",this.value)')}
+    </div>
+
+    ${r.filesTaxes === 'yes' ? `
+    <div class="bg-blue-50 rounded-xl p-4 mb-4">
+      <p class="text-sm text-gray-700">Fill in the tax filers in your household below. Leave blank if there's only one.</p>
+    </div>
+
+    <div class="border rounded-xl p-4 mb-4">
+      <h3 class="font-semibold text-gray-700 mb-3">Tax Filer #1</h3>
+      ${fieldWrap('Full Name',textInput('taxFiler1Name','',r.taxFiler1Name))}
+      <div class="mb-3">
+        <label class="block text-sm font-semibold text-gray-700 mb-2">Filing jointly with a spouse?</label>
+        ${radioGroup('taxFiler1Joint',[['yes','Yes'],['no','No']],r.taxFiler1Joint,'syncRadio("taxFiler1Joint",this.value)')}
+      </div>
+      ${r.taxFiler1Joint === 'yes' ? fieldWrap("Spouse's Full Name",textInput('taxFiler1Spouse','',r.taxFiler1Spouse)) : ''}
+      ${fieldWrap('Dependents being claimed (names, comma-separated)',textInput('taxFiler1Deps','',r.taxFiler1Deps),'','e.g. John Smith, Mary Smith')}
+    </div>
+
+    <div class="border rounded-xl p-4 mb-4">
+      <h3 class="font-semibold text-gray-700 mb-3">Tax Filer #2 (if applicable)</h3>
+      ${fieldWrap('Full Name',textInput('taxFiler2Name','',r.taxFiler2Name))}
+      <div class="mb-3">
+        <label class="block text-sm font-semibold text-gray-700 mb-2">Filing jointly with a spouse?</label>
+        ${radioGroup('taxFiler2Joint',[['yes','Yes'],['no','No']],r.taxFiler2Joint,'syncRadio("taxFiler2Joint",this.value)')}
+      </div>
+      ${r.taxFiler2Joint === 'yes' ? fieldWrap("Spouse's Full Name",textInput('taxFiler2Spouse','',r.taxFiler2Spouse)) : ''}
+      ${fieldWrap('Dependents being claimed (names, comma-separated)',textInput('taxFiler2Deps','',r.taxFiler2Deps))}
+    </div>
+
+    <div class="border rounded-xl p-4 mb-4">
+      <h3 class="font-semibold text-gray-700 mb-3">Claimed as a Dependent by Someone Else?</h3>
+      <p class="text-sm text-gray-600 mb-3">Is anyone in your household claimed as a dependent on someone else's tax return (someone outside your household)?</p>
+      ${checkboxInput('claimedDependent','Yes, someone in our household is claimed as a dependent on another person\'s return',r.claimedDependent,'syncCheck("claimedDependent")')}
+      ${r.claimedDependent ? `
+      <div class="mt-3">
+        ${fieldWrap('Name of tax filer who claims them',textInput('claimedDepFiler','',r.claimedDepFiler))}
+        ${fieldWrap('Name(s) of dependents in your household',textInput('claimedDepNames','',r.claimedDepNames))}
+      </div>` : ''}
+    </div>` : ''}
+  </div>`;
+}
+
+// ============================================================
+// STEP: MEDICAID MEMBERS
+// ============================================================
+function renderMedicaidMembers() {
+  const r = state.renewal;
+  if (!r.medicaidMembers.length) {
+    r.medicaidMembers = [{ name:'', ssnKnown:'yes', ssn1:'', ssn2:'', ssn3:'', noLonger:false, immigrant:'no', docType:'', docId:'' }];
+  }
+
+  const memberCards = r.medicaidMembers.map((m,i) => `
+    <div class="border-2 rounded-xl p-4 mb-4 ${m.noLonger?'opacity-60':''}">
+      <div class="flex justify-between items-center mb-3">
+        <h3 class="font-semibold text-gray-700">Person ${i+1}</h3>
+        ${i > 0 ? `<button onclick="removeMedicaidMember(${i})" class="text-xs text-red-500 underline">Remove</button>` : ''}
+      </div>
+      ${fieldWrap('Full Name',`<input type="text" id="medicaidMembers__${i}__name" value="${escHtml(m.name)}" placeholder="Full name" oninput="syncArrayField('medicaidMembers',${i},'name')" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}
+
+      <div class="mb-3">
+        <label class="block text-sm font-semibold text-gray-700 mb-2">Social Security Number</label>
+        ${radioGroup('ssnStatus_'+i,[['yes','We already have their SSN on file'],['enter','Enter SSN here']],m.ssnKnown,`syncArrayField('medicaidMembers',${i},'ssnKnown',this.value);renderCurrentStep()`)}
+        ${m.ssnKnown === 'enter' ? `
+        <div class="flex gap-2 items-center mt-2">
+          <input type="text" maxlength="3" placeholder="XXX" value="${escHtml(m.ssn1)}" oninput="syncArrayField('medicaidMembers',${i},'ssn1',this.value)" class="w-16 border-2 border-gray-300 rounded-lg px-2 py-2 text-center focus:border-primary outline-none">
+          <span class="text-gray-400">—</span>
+          <input type="text" maxlength="2" placeholder="XX" value="${escHtml(m.ssn2)}" oninput="syncArrayField('medicaidMembers',${i},'ssn2',this.value)" class="w-14 border-2 border-gray-300 rounded-lg px-2 py-2 text-center focus:border-primary outline-none">
+          <span class="text-gray-400">—</span>
+          <input type="text" maxlength="4" placeholder="XXXX" value="${escHtml(m.ssn3)}" oninput="syncArrayField('medicaidMembers',${i},'ssn3',this.value)" class="w-20 border-2 border-gray-300 rounded-lg px-2 py-2 text-center focus:border-primary outline-none">
+        </div>` : ''}
+      </div>
+
+      <div class="mb-3">${checkboxInput('noLonger_'+i,'This person is no longer in my household',m.noLonger,`syncArrayCheck('medicaidMembers',${i},'noLonger');renderCurrentStep()`)}</div>
+
+      <div class="mb-1">
+        <label class="block text-sm font-semibold text-gray-700 mb-2">Immigrant status ${tooltipHtml('If you are not a U.S. citizen, we may need your immigration document information. This only affects your eligibility, not other family members.')}</label>
+        ${selectInput('immig_'+i,[['no','U.S. Citizen / Not Applicable'],['yes','Yes — immigrant with documents']],m.immigrant)}
+        <script>document.getElementById('immig_${i}').addEventListener('change',function(){syncArrayField('medicaidMembers',${i},'immigrant',this.value);renderCurrentStep()})<\/script>
+      </div>
+      ${m.immigrant === 'yes' ? `
+      ${fieldWrap('Document Type',`<input type="text" value="${escHtml(m.docType)}" placeholder="e.g. Permanent Resident Card" oninput="syncArrayField('medicaidMembers',${i},'docType',this.value)" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}
+      ${fieldWrap('Document ID Number',`<input type="text" value="${escHtml(m.docId)}" placeholder="Document ID" oninput="syncArrayField('medicaidMembers',${i},'docId',this.value)" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}` : ''}
+    </div>`).join('');
+
+  return `<div class="step-card bg-white rounded-2xl shadow-sm p-6">
+    ${sectionTitle('Current Medicaid Members', 'These are the people currently getting Medicaid who need to renew. Check the box if someone has moved out.')}
+    <div class="bg-blue-50 rounded-xl p-3 mb-4">
+      <p class="text-sm text-gray-700">Add everyone in your household who currently has Medicaid coverage.</p>
+    </div>
+    ${memberCards}
+    ${r.medicaidMembers.length < 5 ? `<button onclick="addMedicaidMember()" class="w-full py-3 border-2 border-dashed border-primary text-primary font-semibold rounded-xl text-sm hover:bg-blue-50">+ Add Another Person</button>` : ''}
+  </div>`;
+}
+
+function addMedicaidMember() {
+  state.renewal.medicaidMembers.push({ name:'', ssnKnown:'yes', ssn1:'', ssn2:'', ssn3:'', noLonger:false, immigrant:'no', docType:'', docId:'' });
+  renderCurrentStep();
+}
+function removeMedicaidMember(i) {
+  state.renewal.medicaidMembers.splice(i,1);
+  renderCurrentStep();
+}
+
+function syncArrayField(arr, idx, key, val) {
+  const r = state.renewal;
+  if (!r[arr][idx]) return;
+  if (val !== undefined) {
+    r[arr][idx][key] = val;
+  } else {
+    const el = document.getElementById(arr+'__'+idx+'__'+key);
+    if (el) r[arr][idx][key] = el.value;
+  }
+  autoSave();
+}
+
+function syncArrayCheck(arr, idx, key) {
+  const el = document.getElementById(key+'_'+idx) || document.querySelector(`[id^="${key}"]`);
+  // find checkbox by approximate id
+  const allCbs = document.querySelectorAll('input[type=checkbox]');
+  // use direct index approach
+  const r = state.renewal;
+  if (r[arr][idx]) {
+    // toggle
+    r[arr][idx][key] = !r[arr][idx][key];
+  }
+  autoSave();
+}
+
+// ============================================================
+// STEP: OTHER HOUSEHOLD MEMBERS
+// ============================================================
+function renderOtherMembers() {
+  const r = state.renewal;
+  if (!r.otherMembers) r.otherMembers = [];
+
+  const memberCards = r.otherMembers.map((m,i) => `
+    <div class="border-2 rounded-xl p-4 mb-4">
+      <div class="flex justify-between items-center mb-3">
+        <h3 class="font-semibold text-gray-700">Person ${i+1}</h3>
+        <button onclick="removeOtherMember(${i})" class="text-xs text-red-500 underline">Remove</button>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="col-span-2">${fieldWrap('Full Name',`<input type="text" value="${escHtml(m.name)}" placeholder="Full name" oninput="state.renewal.otherMembers[${i}].name=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}</div>
+        <div>${fieldWrap('Date of Birth',`<input type="date" value="${escHtml(m.dob)}" oninput="state.renewal.otherMembers[${i}].dob=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}</div>
+        <div>${fieldWrap('Sex',`<select onchange="state.renewal.otherMembers[${i}].sex=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none bg-white"><option value="">Select</option><option value="M" ${m.sex==='M'?'selected':''}>Male</option><option value="F" ${m.sex==='F'?'selected':''}>Female</option><option value="X" ${m.sex==='X'?'selected':''}>Non-binary/X</option></select>`)}</div>
+      </div>
+      ${fieldWrap('SSN (optional)',`<div class="flex gap-2 items-center"><input type="text" maxlength="3" placeholder="XXX" value="${escHtml(m.ssn1)}" oninput="state.renewal.otherMembers[${i}].ssn1=this.value;autoSave()" class="w-16 border-2 border-gray-300 rounded-lg px-2 py-2 text-center focus:border-primary outline-none"><span class="text-gray-400">—</span><input type="text" maxlength="2" placeholder="XX" value="${escHtml(m.ssn2)}" oninput="state.renewal.otherMembers[${i}].ssn2=this.value;autoSave()" class="w-14 border-2 border-gray-300 rounded-lg px-2 py-2 text-center focus:border-primary outline-none"><span class="text-gray-400">—</span><input type="text" maxlength="4" placeholder="XXXX" value="${escHtml(m.ssn3)}" oninput="state.renewal.otherMembers[${i}].ssn3=this.value;autoSave()" class="w-20 border-2 border-gray-300 rounded-lg px-2 py-2 text-center focus:border-primary outline-none"></div>`,'','You may leave this blank if this person is not applying for Medicaid')}
+      ${fieldWrap('Relationship to you',`<input type="text" value="${escHtml(m.relationship)}" placeholder="e.g. Spouse, Child, Parent" oninput="state.renewal.otherMembers[${i}].relationship=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}
+      <div class="mb-3">
+        <label class="block text-sm font-semibold text-gray-700 mb-2">Medicaid status</label>
+        <div class="flex gap-3">
+          <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="mstatus_${i}" value="has" ${m.medicaidStatus==='has'?'checked':''} onchange="state.renewal.otherMembers[${i}].medicaidStatus='has';autoSave()" class="accent-primary w-4 h-4"><span class="text-sm">Already has Medicaid</span></label>
+          <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="mstatus_${i}" value="apply" ${m.medicaidStatus==='apply'?'checked':''} onchange="state.renewal.otherMembers[${i}].medicaidStatus='apply';autoSave()" class="accent-primary w-4 h-4"><span class="text-sm">Wants to apply</span></label>
+        </div>
+      </div>
+      <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" ${m.noLonger?'checked':''} onchange="state.renewal.otherMembers[${i}].noLonger=this.checked;autoSave();renderCurrentStep()" class="w-4 h-4 accent-primary"><span class="text-sm text-gray-700">No longer in household</span></label>
+    </div>`).join('');
+
+  return `<div class="step-card bg-white rounded-2xl shadow-sm p-6">
+    ${sectionTitle('Other Household Members', 'List anyone who lives with you who is NOT already listed in the previous step — even if they don\'t have Medicaid.')}
+    <div class="bg-blue-50 rounded-xl p-3 mb-4">
+      <p class="text-sm text-gray-700">Include spouses, children, parents, or anyone else who lives with you. Skip this section if everyone in your household is already listed above.</p>
+    </div>
+    ${memberCards.length ? memberCards : '<p class="text-sm text-gray-500 italic mb-4">No additional members added yet.</p>'}
+    ${r.otherMembers.length < 6 ? `<button onclick="addOtherMember()" class="w-full py-3 border-2 border-dashed border-primary text-primary font-semibold rounded-xl text-sm hover:bg-blue-50">+ Add Household Member</button>` : ''}
+  </div>`;
+}
+
+function addOtherMember() {
+  state.renewal.otherMembers.push({ name:'', dob:'', sex:'', ssn1:'', ssn2:'', ssn3:'', relationship:'', medicaidStatus:'', noLonger:false });
+  renderCurrentStep();
+}
+function removeOtherMember(i) {
+  state.renewal.otherMembers.splice(i,1);
+  renderCurrentStep();
+}
+
+// ============================================================
+// STEP: INSURANCE
+// ============================================================
+function renderInsurance() {
+  const r = state.renewal;
+  if (!r.insurances) r.insurances = [];
+
+  const insCards = r.insurances.map((ins,i) => `
+    <div class="border-2 rounded-xl p-4 mb-4">
+      <div class="flex justify-between items-center mb-3">
+        <h3 class="font-semibold text-gray-700">Insurance ${i+1}</h3>
+        <button onclick="removeInsurance(${i})" class="text-xs text-red-500 underline">Remove</button>
+      </div>
+      ${fieldWrap('Insurance Company Name',`<input type="text" value="${escHtml(ins.company)}" placeholder="Insurance company" oninput="state.renewal.insurances[${i}].company=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}
+      ${fieldWrap('Policy Number',`<input type="text" value="${escHtml(ins.policy)}" placeholder="Policy number" oninput="state.renewal.insurances[${i}].policy=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}
+      <div class="mb-3">
+        <label class="block text-sm font-semibold text-gray-700 mb-2">Insurance Type</label>
+        <select onchange="state.renewal.insurances[${i}].type=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none bg-white">
+          <option value="">Select type</option>
+          <option value="Medicare" ${ins.type==='Medicare'?'selected':''}>Medicare</option>
+          <option value="Tricare" ${ins.type==='Tricare'?'selected':''}>Tricare (Military)</option>
+          <option value="Veterans" ${ins.type==='Veterans'?'selected':''}>Veterans Benefits</option>
+          <option value="Other" ${ins.type==='Other'?'selected':''}>Other</option>
+        </select>
+        ${ins.type==='Other'?`<input type="text" value="${escHtml(ins.typeOther)}" placeholder="Describe insurance type" oninput="state.renewal.insurances[${i}].typeOther=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none mt-2">`:''}
+      </div>
+      ${fieldWrap('People covered by this policy (names)',`<input type="text" value="${escHtml(ins.covered)}" placeholder="Names of people on this plan" oninput="state.renewal.insurances[${i}].covered=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}
+    </div>`).join('');
+
+  return `<div class="step-card bg-white rounded-2xl shadow-sm p-6">
+    ${sectionTitle('Other Health Insurance', 'Tell us about any other health insurance your household has. This includes Medicare, Tricare, or insurance through a job.')}
+    ${insCards.length ? insCards : '<p class="text-sm text-gray-500 italic mb-4">No insurance added yet.</p>'}
+    ${r.insurances.length < 5 ? `<button onclick="addInsurance()" class="w-full py-3 border-2 border-dashed border-primary text-primary font-semibold rounded-xl text-sm hover:bg-blue-50 mb-4">+ Add Insurance Plan</button>` : ''}
+
+    <div class="border-t pt-4 space-y-3">
+      <div>${checkboxInput('jobOffered','Someone in my household was offered insurance through a job (even if they didn\'t enroll)',r.jobOffered,'syncCheck("jobOffered")')}</div>
+      <div>${checkboxInput('stateEmployee','One of the insurance plans listed is a state employee benefit plan',r.stateEmployee,'syncCheck("stateEmployee")')}</div>
+    </div>
+  </div>`;
+}
+
+function addInsurance() {
+  state.renewal.insurances.push({ company:'', policy:'', type:'', typeOther:'', covered:'' });
+  renderCurrentStep();
+}
+function removeInsurance(i) {
+  state.renewal.insurances.splice(i,1);
+  renderCurrentStep();
+}
+
+// ============================================================
+// STEP: SPECIAL CIRCUMSTANCES
+// ============================================================
+function renderSpecial() {
+  const r = state.renewal;
+  const item = (key, label, tip='') => `
+    <div class="border rounded-xl p-4 mb-3">
+      <div class="mb-2">${checkboxInput(key, label, r[key], `syncCheck('${key}')`)}</div>
+      ${r[key] ? `<div class="mt-2">${fieldWrap('Who does this apply to?',`<input type="text" id="${key}Names" value="${escHtml(r[key+'Names'])}" placeholder="Names (comma-separated)" oninput="syncField('${key}Names')" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}</div>` : ''}
+    </div>`;
+
+  return `<div class="step-card bg-white rounded-2xl shadow-sm p-6">
+    ${sectionTitle('Special Circumstances', 'Check any boxes that apply to people in your household. These may affect your coverage options or eligibility.')}
+
+    ${item('sc_limitWork','Has a medical, mental health, or substance use condition that limits their ability to work, go to school, or do daily activities')}
+    ${item('sc_longTermCare','Lives in a long-term care facility or nursing home, or receives home care services')}
+    ${item('sc_blind','Is blind or terminally ill')}
+    ${item('sc_student','Is 18–22 years old and is a full-time student')}
+    ${item('sc_foster','Is 18–26 years old and was in foster care at age 18')}
+
+    <div class="border rounded-xl p-4 mb-3">
+      <div class="mb-2">${checkboxInput('sc_pregnant','Is currently pregnant',r.sc_pregnant,'syncCheck("sc_pregnant")')}</div>
+      ${r.sc_pregnant ? `
+      <div class="mt-2">
+        ${fieldWrap('Who is pregnant?',`<input type="text" id="sc_pregnantNames" value="${escHtml(r.sc_pregnantNames)}" placeholder="Name(s)" oninput="syncField('sc_pregnantNames')" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}
+        ${fieldWrap('Number of babies expected',`<input type="number" id="sc_pregnantBabies" value="${escHtml(r.sc_pregnantBabies)}" min="1" max="8" placeholder="1" oninput="syncField('sc_pregnantBabies')" class="w-32 border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}
+      </div>` : ''}
+    </div>
+
+    <div class="border rounded-xl p-4 mb-3">
+      <div class="mb-2">${checkboxInput('sc_native','Is American Indian or Alaska Native',r.sc_native,'syncCheck("sc_native")')}</div>
+      ${r.sc_native ? `
+      <div class="mt-2 bg-yellow-50 rounded-lg p-3">
+        <p class="text-xs text-yellow-800 font-medium">American Indian/Alaska Native members may be eligible for additional benefits and different eligibility rules.</p>
+        ${fieldWrap('Names of AI/AN household members',`<input type="text" id="sc_nativeNames" value="${escHtml(r.sc_nativeNames)}" placeholder="Names" oninput="syncField('sc_nativeNames')" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}
+      </div>` : ''}
+    </div>
+  </div>`;
+}
+
+// ============================================================
+// STEP: EMPLOYMENT
+// ============================================================
+function renderEmployment() {
+  const r = state.renewal;
+  if (!r.jobs) r.jobs = [];
+  if (!r.selfEmployed) r.selfEmployed = [];
+  const freqOptions = [['','Select'],['hourly','Hourly'],['weekly','Weekly'],['biweekly','Every two weeks'],['semimonthly','Twice a month'],['monthly','Monthly'],['yearly','Yearly']];
+
+  const jobCards = r.jobs.map((j,i) => `
+    <div class="border-2 rounded-xl p-4 mb-4">
+      <div class="flex justify-between items-center mb-3">
+        <h3 class="font-semibold text-gray-700">Job ${i+1}</h3>
+        <button onclick="removeJob(${i})" class="text-xs text-red-500 underline">Remove</button>
+      </div>
+      ${fieldWrap('Worker\'s Name',`<input type="text" value="${escHtml(j.workerName)}" placeholder="Name of person with this job" oninput="state.renewal.jobs[${i}].workerName=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}
+      ${fieldWrap('Employer Name',`<input type="text" value="${escHtml(j.empName)}" placeholder="Employer / Company name" oninput="state.renewal.jobs[${i}].empName=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}
+      ${fieldWrap('Employer Phone',`<input type="tel" value="${escHtml(j.empPhone)}" placeholder="(555) 555-5555" oninput="state.renewal.jobs[${i}].empPhone=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}
+      ${fieldWrap('Employer Address',`<input type="text" value="${escHtml(j.empStreet)}" placeholder="Street address" oninput="state.renewal.jobs[${i}].empStreet=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}
+      <div class="grid grid-cols-3 gap-2">
+        <div class="col-span-3 sm:col-span-1">${fieldWrap('City',`<input type="text" value="${escHtml(j.empCity)}" placeholder="City" oninput="state.renewal.jobs[${i}].empCity=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}</div>
+        <div>${fieldWrap('State',`<input type="text" maxlength="2" value="${escHtml(j.empState)}" placeholder="ST" oninput="state.renewal.jobs[${i}].empState=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none text-center">`)}</div>
+        <div>${fieldWrap('ZIP',`<input type="text" maxlength="5" value="${escHtml(j.empZip)}" placeholder="00000" oninput="state.renewal.jobs[${i}].empZip=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}</div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>${fieldWrap('Pay Frequency',`<select onchange="state.renewal.jobs[${i}].payFreq=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none bg-white">${freqOptions.map(([v,l])=>`<option value="${v}"${j.payFreq===v?' selected':''}>${l}</option>`).join('')}</select>`)}</div>
+        <div>${fieldWrap('Gross Pay Amount',`<div class="relative"><span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span><input type="text" value="${escHtml(j.payAmount)}" placeholder="0.00" oninput="state.renewal.jobs[${i}].payAmount=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg pl-7 pr-3 py-2 focus:border-primary outline-none"></div>`)}</div>
+      </div>
+      ${fieldWrap('Average Hours Per Week',`<input type="number" value="${escHtml(j.hoursPerWeek)}" min="1" max="80" placeholder="e.g. 40" oninput="state.renewal.jobs[${i}].hoursPerWeek=this.value;autoSave()" class="w-32 border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}
+    </div>`).join('');
+
+  const selfCards = r.selfEmployed.map((s,i) => `
+    <div class="border-2 rounded-xl p-4 mb-4">
+      <div class="flex justify-between items-center mb-3">
+        <h3 class="font-semibold text-gray-700">Self-Employment ${i+1}</h3>
+        <button onclick="removeSelfEmp(${i})" class="text-xs text-red-500 underline">Remove</button>
+      </div>
+      ${fieldWrap('Person\'s Name',`<input type="text" value="${escHtml(s.name)}" placeholder="Name" oninput="state.renewal.selfEmployed[${i}].name=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}
+      ${fieldWrap('Type of Work',`<input type="text" value="${escHtml(s.workType)}" placeholder="e.g. Freelance design, Lawn care" oninput="state.renewal.selfEmployed[${i}].workType=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}
+      ${fieldWrap('Net Monthly Income',`<div class="relative"><span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span><input type="text" value="${escHtml(s.netMonthly)}" placeholder="0.00" oninput="state.renewal.selfEmployed[${i}].netMonthly=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg pl-7 pr-3 py-2 focus:border-primary outline-none"></div>`,'Income after deducting business expenses')}
+      <div class="mt-3">
+        <label class="block text-sm font-semibold text-gray-700 mb-2">Common deductions (check all that apply)</label>
+        <div class="grid grid-cols-2 gap-2">
+          ${['Car/truck expenses','Depreciation','Employee wages','Business insurance','Interest payments','Legal/professional fees','Rent or utilities','Commissions','Advertising','Contract labor','Repairs','Business meals (50%)','SE taxes paid','Health insurance premiums','Retirement plan contributions'].map((ded,di)=>
+            `<label class="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" ${(s.deductions||[]).includes(ded)?'checked':''} onchange="toggleSelfEmpDeduction(${i},'${ded}',this.checked)" class="w-4 h-4 accent-primary flex-shrink-0"><span>${ded}</span></label>`
+          ).join('')}
+        </div>
+      </div>
+    </div>`).join('');
+
+  return `<div class="step-card bg-white rounded-2xl shadow-sm p-6">
+    ${sectionTitle('Employment & Work Income', 'Fill this out for everyone in your household who has a job. Include part-time and seasonal work.')}
+    <div class="bg-blue-50 rounded-xl p-3 mb-4">
+      <p class="text-sm text-gray-700">List each job separately. If someone has two jobs, add two entries.</p>
+    </div>
+    ${jobCards.length ? jobCards : '<p class="text-sm text-gray-500 italic mb-4">No jobs added yet.</p>'}
+    ${r.jobs.length < 5 ? `<button onclick="addJob()" class="w-full py-3 border-2 border-dashed border-primary text-primary font-semibold rounded-xl text-sm hover:bg-blue-50 mb-6">+ Add a Job</button>` : ''}
+
+    <div class="border-t pt-4 mb-4">
+      <h3 class="font-semibold text-gray-700 mb-3">Job Changes ${tooltipHtml('Tell us if anyone stopped working, reduced their hours, or changed jobs in the past 4 months.')}</h3>
+      <div class="mb-3">${checkboxInput('jobChange','Someone stopped working, reduced their hours, or changed jobs in the past 4 months',r.jobChange,'syncCheck("jobChange")')}</div>
+      ${r.jobChange ? `
+        ${fieldWrap('Person\'s name',textInput('jobChangeName','',r.jobChangeName))}
+        ${fieldWrap('What changed?',`<textarea id="jobChangeWhat" oninput="syncField('jobChangeWhat')" rows="2" placeholder="Describe the change" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none resize-none">${escHtml(r.jobChangeWhat)}</textarea>`)}` : ''}
+    </div>
+
+    <div class="border-t pt-4">
+      <h3 class="font-semibold text-gray-700 mb-3">Self-Employment</h3>
+      ${selfCards.length ? selfCards : '<p class="text-sm text-gray-500 italic mb-4">No self-employment added.</p>'}
+      ${r.selfEmployed.length < 3 ? `<button onclick="addSelfEmp()" class="w-full py-3 border-2 border-dashed border-accent text-accent font-semibold rounded-xl text-sm hover:bg-green-50">+ Add Self-Employment Income</button>` : ''}
+    </div>
+  </div>`;
+}
+
+function addJob() {
+  state.renewal.jobs.push({ workerName:'', empName:'', empPhone:'', empStreet:'', empCity:'', empState:'', empZip:'', payFreq:'', payAmount:'', hoursPerWeek:'' });
+  renderCurrentStep();
+}
+function removeJob(i) { state.renewal.jobs.splice(i,1); renderCurrentStep(); }
+function addSelfEmp() {
+  state.renewal.selfEmployed.push({ name:'', workType:'', netMonthly:'', deductions:[] });
+  renderCurrentStep();
+}
+function removeSelfEmp(i) { state.renewal.selfEmployed.splice(i,1); renderCurrentStep(); }
+function toggleSelfEmpDeduction(i, ded, checked) {
+  const s = state.renewal.selfEmployed[i];
+  if (!s.deductions) s.deductions = [];
+  if (checked) { if (!s.deductions.includes(ded)) s.deductions.push(ded); }
+  else { s.deductions = s.deductions.filter(d=>d!==ded); }
+  autoSave();
+}
+
+// ============================================================
+// STEP: OTHER INCOME
+// ============================================================
+function renderOtherIncome() {
+  const r = state.renewal;
+  if (!r.otherIncome) r.otherIncome = [];
+  const freqOptions = [['','Select'],['weekly','Weekly'],['biweekly','Every 2 weeks'],['semimonthly','Twice/month'],['monthly','Monthly'],['yearly','Yearly'],['other','Other']];
+  const incomeTypes = ['Unemployment benefits','Social Security (SSDI/SSI/retirement)','Pension payments','Retirement account distributions','Alimony received','Farming or fishing profits','Rental income or royalties','Other income'];
+
+  const incCards = r.otherIncome.map((inc,i) => `
+    <div class="border-2 rounded-xl p-4 mb-3">
+      <div class="flex justify-between items-center mb-2">
+        <span class="font-medium text-sm text-gray-700">${escHtml(inc.type)||'Income '+(i+1)}</span>
+        <button onclick="removeOtherIncome(${i})" class="text-xs text-red-500 underline">Remove</button>
+      </div>
+      ${fieldWrap('Income Type',`<select onchange="state.renewal.otherIncome[${i}].type=this.value;autoSave();renderCurrentStep()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none bg-white"><option value="">Select type</option>${incomeTypes.map(t=>`<option value="${t}"${inc.type===t?' selected':''}>${t}</option>`).join('')}</select>`)}
+      ${inc.type==='Other income'?fieldWrap('Describe income type',`<input type="text" value="${escHtml(inc.typeOther)}" placeholder="Type of income" oninput="state.renewal.otherIncome[${i}].typeOther=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`):''}
+      ${fieldWrap('Person receiving this income',`<input type="text" value="${escHtml(inc.personName)}" placeholder="Full name" oninput="state.renewal.otherIncome[${i}].personName=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}
+      <div class="grid grid-cols-2 gap-3">
+        <div>${fieldWrap('Amount',`<div class="relative"><span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span><input type="text" value="${escHtml(inc.amount)}" placeholder="0.00" oninput="state.renewal.otherIncome[${i}].amount=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg pl-7 pr-3 py-2 focus:border-primary outline-none"></div>`)}</div>
+        <div>${fieldWrap('Frequency',`<select onchange="state.renewal.otherIncome[${i}].freq=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none bg-white">${freqOptions.map(([v,l])=>`<option value="${v}"${inc.freq===v?' selected':''}>${l}</option>`).join('')}</select>`)}</div>
+      </div>
+    </div>`).join('');
+
+  return `<div class="step-card bg-white rounded-2xl shadow-sm p-6">
+    ${sectionTitle('Other Income & Deductions', 'List any income that isn\'t from a regular job. Include unemployment, Social Security, pensions, and more.')}
+    ${incCards.length ? incCards : '<p class="text-sm text-gray-500 italic mb-4">No other income added yet.</p>'}
+    ${r.otherIncome.length < 8 ? `<button onclick="addOtherIncome()" class="w-full py-3 border-2 border-dashed border-primary text-primary font-semibold rounded-xl text-sm hover:bg-blue-50 mb-5">+ Add Income Source</button>` : ''}
+
+    <div class="border-t pt-4 mb-4">
+      <h3 class="font-semibold text-gray-700 mb-3">Deductions ${tooltipHtml('Some payments you make can reduce your countable income — like alimony you pay, or student loan interest.')}</h3>
+      ${fieldWrap('Alimony paid (monthly amount)',`<div class="relative"><span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span><input type="text" id="alimonyPaid" value="${escHtml(r.alimonyPaid)}" placeholder="0.00" oninput="syncField('alimonyPaid')" class="w-full border-2 border-gray-300 rounded-lg pl-7 pr-3 py-2 focus:border-primary outline-none"></div>`)}
+      ${fieldWrap('Student loan interest paid (yearly)',`<div class="relative"><span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span><input type="text" id="studentLoanInt" value="${escHtml(r.studentLoanInt)}" placeholder="0.00" oninput="syncField('studentLoanInt')" class="w-full border-2 border-gray-300 rounded-lg pl-7 pr-3 py-2 focus:border-primary outline-none"></div>`)}
+      ${fieldWrap('Other deductions (describe)',`<input type="text" id="otherDeductions" value="${escHtml(r.otherDeductions)}" placeholder="Type and amount" oninput="syncField('otherDeductions')" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}
+    </div>
+
+    <div class="border-t pt-4">
+      <h3 class="font-semibold text-gray-700 mb-3">Variable Income ${tooltipHtml('If someone\'s income changes each month (like seasonal work or freelance), list them here and give an expected annual amount.')}</h3>
+      ${fieldWrap('Anyone with income that changes month to month?',`<textarea id="variableIncome" oninput="syncField('variableIncome')" rows="3" placeholder="Name — type of variable income — estimated annual amount" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none resize-none">${escHtml(r.variableIncome)}</textarea>`)}
+    </div>
+  </div>`;
+}
+
+function addOtherIncome() {
+  state.renewal.otherIncome.push({ type:'', typeOther:'', personName:'', amount:'', freq:'' });
+  renderCurrentStep();
+}
+function removeOtherIncome(i) { state.renewal.otherIncome.splice(i,1); renderCurrentStep(); }
+
+// ============================================================
+// STEP: SIGNATURE
+// ============================================================
+function renderSignature() {
+  const r = state.renewal;
+  return `<div class="step-card bg-white rounded-2xl shadow-sm p-6">
+    ${sectionTitle('Your Rights & Signature', 'Almost done! Please review your rights and sign below.')}
+
+    <div class="bg-blue-50 rounded-xl p-4 mb-5">
+      <h3 class="font-semibold text-gray-800 mb-2">Your Rights</h3>
+      <ul class="space-y-1 text-sm text-gray-700">
+        ${[
+          'You have the right to a fair hearing if your benefits are changed or denied.',
+          'You may choose an authorized representative to help you.',
+          'You have the right to appeal any decision within 90 days.',
+          'You may submit this application in any language.',
+          'You will not be discriminated against based on race, color, national origin, sex, age, or disability.',
+          'False information may result in repayment of benefits or legal action.',
+          'All information you provide is kept confidential under federal and state law.'
+        ].map(r=>`<li class="flex items-start gap-2"><svg class="w-3 h-3 text-primary mt-1 flex-shrink-0" fill="currentColor" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4"/></svg>${r}</li>`).join('')}
+      </ul>
+    </div>
+
+    <div class="mb-5">
+      <h3 class="font-semibold text-gray-700 mb-2">Tax Return Permission ${tooltipHtml('This allows us to verify your income using IRS data to make renewal easier in future years.')}</h3>
+      <p class="text-sm text-gray-600 mb-3">How many years do you give us permission to use your tax return information to determine eligibility?</p>
+      ${radioGroup('taxPermission',[['1','1 year'],['2','2 years'],['3','3 years'],['4','4 years'],['5','5 years'],['none','No permission']],r.taxPermission,'syncRadio("taxPermission",this.value)')}
+    </div>
+
+    <div class="border-t pt-4">
+      <p class="text-sm text-gray-700 mb-4">By typing your name below, you are signing this renewal application and certifying that all information provided is true and correct to the best of your knowledge.</p>
+      ${fieldWrap('Type your full name as your signature',textInput('sigName','Full Legal Name',r.sigName),'sigName','',true)}
+      <div class="flex gap-3 mt-2">
+        <div class="flex-1">${fieldWrap('Date',`<input type="text" id="sigDate" value="${escHtml(r.sigDate)}" readonly class="w-full border-2 border-gray-200 rounded-lg px-3 py-2 bg-gray-50 text-gray-600">`)}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ============================================================
+// STEP: CONFIRMATION
+// ============================================================
+function renderConfirmation() {
+  const r = state.renewal;
+  console.log('BenefitsGuide Form Submitted:', JSON.stringify(state.renewal, null, 2));
+  return `<div class="step-card bg-white rounded-2xl shadow-sm p-6 text-center">
+    <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-green-100 mb-4">
+      <svg class="w-10 h-10 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+    </div>
+    <h2 class="text-2xl font-bold text-accent mb-2">Renewal Submitted!</h2>
+    <p class="text-gray-600 mb-6">Thank you, ${escHtml(r.firstName)}. Your Medicaid renewal has been submitted.</p>
+
+    <div class="bg-blue-50 rounded-xl p-4 mb-5 text-left">
+      <h3 class="font-semibold text-gray-800 mb-3">What happens next:</h3>
+      <ol class="space-y-2 text-sm text-gray-700 list-decimal list-inside">
+        <li>Your application will be reviewed within <strong>30–45 days</strong>.</li>
+        <li>You may be contacted if additional documentation is needed.</li>
+        <li>A decision letter will be mailed to your address on file.</li>
+        <li>If approved, your coverage continues without interruption.</li>
+        <li>If denied, you have 90 days to appeal the decision.</li>
+      </ol>
+    </div>
+
+    <div class="bg-green-50 rounded-xl p-4 mb-5 text-left">
+      <h3 class="font-semibold text-gray-700 mb-2">Submission Summary</h3>
+      <p class="text-sm text-gray-700"><span class="font-medium">Name:</span> ${escHtml(r.firstName)} ${escHtml(r.lastName)}</p>
+      <p class="text-sm text-gray-700"><span class="font-medium">Address:</span> ${escHtml(r.homeStreet)}, ${escHtml(r.homeCity)}, ${escHtml(r.homeState)} ${escHtml(r.homeZip)}</p>
+      <p class="text-sm text-gray-700"><span class="font-medium">Phone:</span> ${escHtml(r.phoneNumber)}</p>
+      <p class="text-sm text-gray-700"><span class="font-medium">Submitted:</span> ${r.sigDate}</p>
+      <p class="text-sm text-gray-700"><span class="font-medium">Members covered:</span> ${r.medicaidMembers.filter(m=>!m.noLonger).length}</p>
+    </div>
+
+    <div class="flex gap-3">
+      <button onclick="window.print()" class="flex-1 py-3 rounded-xl bg-primary text-white font-semibold text-sm">Print / Save Summary</button>
+      <button onclick="startOver()" class="flex-1 py-3 rounded-xl border-2 border-gray-300 text-gray-700 font-semibold text-sm">Start New Application</button>
+    </div>
+  </div>`;
+}
+
+function startOver() {
+  if (confirm('Start a new application? Your current data will be cleared.')) {
+    localStorage.removeItem('benefitsguide_state');
+    localStorage.removeItem('benefitsguide_step');
+    location.reload();
+  }
+}
+
+// ============================================================
+// WORK REQUIREMENTS STEPS
+// ============================================================
+function renderWorkWelcome() {
+  return `<div class="step-card bg-white rounded-2xl shadow-sm p-6">
+    <div class="text-center mb-6">
+      <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 mb-4">
+        <svg class="w-8 h-8 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+      </div>
+      <h1 class="text-2xl font-bold text-primary">Work Requirements Form</h1>
+      <p class="text-gray-600 mt-2">Verify your employment activities to maintain Medicaid eligibility</p>
+    </div>
+    <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-4">
+      <p class="text-sm text-yellow-800"><strong>Note:</strong> Some states require Medicaid recipients aged 19–64 to participate in work, job training, or community service. This form helps verify those activities.</p>
+    </div>
+    <div class="bg-blue-50 rounded-xl p-4 mb-4">
+      <h3 class="font-semibold text-gray-800 mb-2">You may be exempt if you:</h3>
+      <ul class="space-y-1 text-sm text-gray-700">
+        ${['Are pregnant','Care for a child under age 6','Have a disability or serious medical condition','Are a full-time student','Are already working 80+ hours/month','Have another qualifying reason'].map(i=>`<li class="flex items-start gap-2"><svg class="w-4 h-4 text-accent mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>${i}</li>`).join('')}
+      </ul>
+    </div>
+  </div>`;
+}
+
+function renderWorkContact() {
+  const w = state.work;
+  return `<div class="step-card bg-white rounded-2xl shadow-sm p-6">
+    ${sectionTitle('Contact Information','Your contact information for the work requirements form.')}
+    <div class="grid grid-cols-2 gap-3">
+      <div>${fieldWrap('First Name',`<input type="text" id="firstName" value="${escHtml(w.firstName)}" placeholder="First" oninput="state.work.firstName=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`,'firstName','',true)}</div>
+      <div>${fieldWrap('Last Name',`<input type="text" id="lastName" value="${escHtml(w.lastName)}" placeholder="Last" oninput="state.work.lastName=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`,'lastName','',true)}</div>
+    </div>
+    ${fieldWrap('Home Address',`<input type="text" id="address" value="${escHtml(w.address)}" placeholder="Street address" oninput="state.work.address=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`,'address','',true)}
+    <div class="grid grid-cols-3 gap-2">
+      <div class="col-span-1">${fieldWrap('City',`<input type="text" id="city" value="${escHtml(w.city)}" placeholder="City" oninput="state.work.city=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}</div>
+      <div>${fieldWrap('State',`<input type="text" maxlength="2" id="state" value="${escHtml(w.state)}" placeholder="ST" oninput="state.work.state=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none text-center">`)}</div>
+      <div>${fieldWrap('ZIP',`<input type="text" maxlength="5" id="zip" value="${escHtml(w.zip)}" placeholder="00000" oninput="state.work.zip=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}</div>
+    </div>
+    ${fieldWrap('Phone Number',`<input type="tel" id="phone" value="${escHtml(w.phone)}" placeholder="(555) 555-5555" oninput="state.work.phone=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`,'phone','',true)}
+    ${fieldWrap('Email (optional)',`<input type="email" id="email" value="${escHtml(w.email)}" placeholder="you@example.com" oninput="state.work.email=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}
+  </div>`;
+}
+
+function renderWorkEmployment() {
+  const w = state.work;
+  if (!w.searches) w.searches = [];
+
+  return `<div class="step-card bg-white rounded-2xl shadow-sm p-6">
+    ${sectionTitle('Employment Status','Tell us about your current work situation. If you are exempt, you can indicate that here.')}
+
+    <div class="mb-5">
+      <label class="block text-sm font-semibold text-gray-700 mb-2">Current employment status <span class="text-error">*</span></label>
+      ${radioGroup('empStatus',[['working','I am currently working'],['looking','I am actively looking for work'],['exempt','I qualify for an exemption']],w.empStatus,'state.work.empStatus=this.value;autoSave();renderCurrentStep()')}
+    </div>
+
+    ${w.empStatus === 'working' ? `
+    <div class="border-t pt-4">
+      <h3 class="font-semibold text-gray-700 mb-3">Employer Information</h3>
+      ${fieldWrap('Employer Name',`<input type="text" value="${escHtml(w.empName)}" placeholder="Company name" oninput="state.work.empName=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}
+      ${fieldWrap('Employer Address',`<input type="text" value="${escHtml(w.empAddress)}" placeholder="Work address" oninput="state.work.empAddress=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}
+      <div class="grid grid-cols-2 gap-3">
+        <div>${fieldWrap('Hours per week',`<input type="number" value="${escHtml(w.empHours)}" min="1" max="80" placeholder="e.g. 20" oninput="state.work.empHours=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}</div>
+        <div>${fieldWrap('Hourly wage',`<div class="relative"><span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span><input type="text" value="${escHtml(w.empWage)}" placeholder="0.00" oninput="state.work.empWage=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg pl-7 pr-3 py-2 focus:border-primary outline-none"></div>`)}</div>
+      </div>
+    </div>` : ''}
+
+    ${w.empStatus === 'looking' ? `
+    <div class="border-t pt-4">
+      <h3 class="font-semibold text-gray-700 mb-3">Job Search Activities ${tooltipHtml('List your job search activities for this reporting period. Include at least 3 contacts per week if required by your state.')}</h3>
+      <p class="text-sm text-gray-600 mb-3">List companies you contacted and the date/method for each.</p>
+      ${w.searches.map((s,i) => `
+        <div class="border rounded-xl p-3 mb-3">
+          <div class="flex justify-between mb-2">
+            <span class="text-sm font-medium text-gray-700">Contact ${i+1}</span>
+            <button onclick="removeSearch(${i})" class="text-xs text-red-500 underline">Remove</button>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div class="col-span-2">${fieldWrap('Company/Employer',`<input type="text" value="${escHtml(s.company)}" placeholder="Company name" oninput="state.work.searches[${i}].company=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}</div>
+            <div>${fieldWrap('Date',`<input type="date" value="${escHtml(s.date)}" oninput="state.work.searches[${i}].date=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`)}</div>
+            <div>${fieldWrap('Method',`<select onchange="state.work.searches[${i}].method=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none bg-white"><option value="">Select</option><option value="online" ${s.method==='online'?'selected':''}>Online application</option><option value="inperson" ${s.method==='inperson'?'selected':''}>In person</option><option value="phone" ${s.method==='phone'?'selected':''}>Phone call</option><option value="referral" ${s.method==='referral'?'selected':''}>Referral</option><option value="email" ${s.method==='email'?'selected':''}>Email</option></select>`)}</div>
+          </div>
+        </div>`).join('')}
+      <button onclick="addSearch()" class="w-full py-2 border-2 border-dashed border-primary text-primary font-semibold rounded-xl text-sm hover:bg-blue-50">+ Add Job Contact</button>
+    </div>` : ''}
+
+    ${w.empStatus === 'exempt' ? `
+    <div class="border-t pt-4">
+      <h3 class="font-semibold text-gray-700 mb-3">Exemption Reason</h3>
+      <label class="block text-sm font-semibold text-gray-700 mb-2">Select your exemption:</label>
+      ${[['child_u6','Caring for a child under age 6'],['disability','I have a disability or serious medical condition'],['caregiver','I am a primary caregiver for a disabled family member'],['student','I am a full-time student'],['pregnant','I am pregnant'],['other','Other reason']].map(([v,l])=>`
+        <label class="flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer ${w.exemption===v?'border-primary bg-blue-50':'border-gray-200'} mb-2">
+          <input type="radio" name="exemption" value="${v}" ${w.exemption===v?'checked':''} onchange="state.work.exemption='${v}';autoSave()" class="w-4 h-4 accent-primary">
+          <span class="text-sm font-medium text-gray-700">${l}</span>
+        </label>`).join('')}
+      <div class="mt-4 border-2 border-dashed border-gray-300 rounded-xl p-4 text-center">
+        <svg class="w-8 h-8 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        <p class="text-sm text-gray-600 font-medium">Supporting Documentation</p>
+        <p class="text-xs text-gray-500 mt-1">In the full app, you would upload documentation here (doctor's letter, school enrollment, etc.)</p>
+        <button class="mt-3 px-4 py-2 border-2 border-gray-300 rounded-lg text-sm text-gray-600 hover:border-primary hover:text-primary" onclick="alert('Document upload would be enabled in the live system.')">Attach Document</button>
+      </div>
+    </div>` : ''}
+  </div>`;
+}
+
+function addSearch() {
+  state.work.searches.push({ company:'', date:'', method:'' });
+  renderCurrentStep();
+}
+function removeSearch(i) { state.work.searches.splice(i,1); renderCurrentStep(); }
+
+function renderWorkSignature() {
+  const w = state.work;
+  return `<div class="step-card bg-white rounded-2xl shadow-sm p-6">
+    ${sectionTitle('Review & Sign','Please certify that the information you provided is accurate.')}
+    <div class="bg-blue-50 rounded-xl p-4 mb-5">
+      <p class="text-sm text-gray-700">By signing this form, I certify that:</p>
+      <ul class="mt-2 space-y-1 text-sm text-gray-700">
+        <li class="flex gap-2"><svg class="w-3 h-3 text-primary mt-1 flex-shrink-0" fill="currentColor" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4"/></svg>All information I provided is true and complete.</li>
+        <li class="flex gap-2"><svg class="w-3 h-3 text-primary mt-1 flex-shrink-0" fill="currentColor" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4"/></svg>I understand that false information may result in loss of benefits.</li>
+        <li class="flex gap-2"><svg class="w-3 h-3 text-primary mt-1 flex-shrink-0" fill="currentColor" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4"/></svg>I will report any changes in my employment status within 10 days.</li>
+      </ul>
+    </div>
+    ${fieldWrap('Type your full name as your signature',`<input type="text" id="sigName" value="${escHtml(w.sigName)}" placeholder="Full Legal Name" oninput="state.work.sigName=this.value;autoSave()" class="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:border-primary outline-none">`,'sigName','',true)}
+    ${fieldWrap('Date',`<input type="text" id="sigDate" value="${escHtml(w.sigDate)}" readonly class="w-full border-2 border-gray-200 rounded-lg px-3 py-2 bg-gray-50 text-gray-600">`)}
+  </div>`;
+}
+
+function renderWorkConfirmation() {
+  const w = state.work;
+  console.log('Work Requirements Form Submitted:', JSON.stringify(state.work, null, 2));
+  const statusLabel = { working:'Currently Working', looking:'Actively Looking for Work', exempt:'Exempt' };
+  return `<div class="step-card bg-white rounded-2xl shadow-sm p-6 text-center">
+    <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-green-100 mb-4">
+      <svg class="w-10 h-10 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+    </div>
+    <h2 class="text-2xl font-bold text-accent mb-2">Form Submitted!</h2>
+    <p class="text-gray-600 mb-6">Thank you, ${escHtml(w.firstName)}. Your work requirements form has been submitted.</p>
+    <div class="bg-blue-50 rounded-xl p-4 mb-5 text-left">
+      <h3 class="font-semibold text-gray-800 mb-2">Submission Summary</h3>
+      <p class="text-sm text-gray-700"><span class="font-medium">Name:</span> ${escHtml(w.firstName)} ${escHtml(w.lastName)}</p>
+      <p class="text-sm text-gray-700"><span class="font-medium">Status:</span> ${statusLabel[w.empStatus]||'—'}</p>
+      <p class="text-sm text-gray-700"><span class="font-medium">Date:</span> ${w.sigDate}</p>
+    </div>
+    <div class="flex gap-3">
+      <button onclick="window.print()" class="flex-1 py-3 rounded-xl bg-primary text-white font-semibold text-sm">Print Summary</button>
+      <button onclick="setMode('renewal');currentStep=0;renderCurrentStep()" class="flex-1 py-3 rounded-xl border-2 border-gray-300 text-gray-700 font-semibold text-sm">Go to Renewal Form</button>
+    </div>
+  </div>`;
+}
+
+// ============================================================
+// INIT
+// ============================================================
+loadFromStorage();
+updateTabs();
+renderCurrentStep();
+
+// Show resume toast if returning user
+if (localStorage.getItem('benefitsguide_step') && parseInt(localStorage.getItem('benefitsguide_step')) > 0) {
+  setTimeout(() => showToast('Welcome back — your progress was restored'), 600);
+}
+</script>
+</body>
+</html>

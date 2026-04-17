@@ -135,24 +135,6 @@ tailwind.config = {
   @media(max-width:900px) { .lp-programs-grid { grid-template-columns:repeat(2,1fr); } }
   @media(max-width:560px) { .lp-programs-grid { grid-template-columns:1fr; } }
 
-  /* Who we serve */
-  .lp-serve-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:28px; margin-top:48px; }
-  .lp-serve-card { background:white; border-radius:16px; padding:48px 36px; box-shadow:0 2px 16px rgba(0,0,0,0.07); text-align:center; box-sizing:border-box; }
-  .lp-serve-icon { font-size:56px; display:block; margin-bottom:20px; }
-  .lp-serve-title { font-size:17px; font-weight:700; color:#1a1a1a; margin-bottom:10px; text-align:center; }
-  .lp-serve-body { font-size:14px; color:#666; line-height:1.65; text-align:center; }
-
-  /* Testimonials */
-  .lp-testi-bg { background:#F8FAFC; }
-  .lp-testi-wrap { padding:96px 0; }
-  .lp-testi-title { font-size:clamp(1.8rem,4vw,2.6rem); font-weight:800; color:#0f1a2e; text-align:center; margin-bottom:56px; padding:0 16px; }
-  .lp-testi-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:24px; }
-  .lp-testi-card { background:white; border-radius:16px; padding:36px; box-shadow:0 2px 12px rgba(0,0,0,0.06); box-sizing:border-box; position:relative; }
-  .lp-testi-bigquote { font-size:64px; font-weight:800; color:#EBF2FB; line-height:1; margin-bottom:8px; font-family:Georgia,serif; }
-  .lp-testi-quote { font-size:16px; color:#333; line-height:1.7; margin-bottom:20px; font-style:italic; }
-  .lp-testi-attr { font-size:14px; color:#1B4D8E; font-weight:700; }
-  @media(max-width:900px) { .lp-testi-grid { grid-template-columns:repeat(2,1fr); } }
-  @media(max-width:560px) { .lp-testi-grid { grid-template-columns:1fr; } }
 
   /* Footer */
   .lp-footer-top { background:#0f2d55; padding:48px 0; }
@@ -181,7 +163,6 @@ tailwind.config = {
     .lp-stat:last-child { border-bottom:none; }
     .lp-section { padding:48px 0; }
     .lp-programs-wrap { padding:48px 0; }
-    .lp-testi-wrap { padding:48px 0; }
   }
   @media(max-width:480px) {
     .lp-hero-btns { flex-direction:column; align-items:center; }
@@ -338,58 +319,6 @@ tailwind.config = {
     </div>
   </div>
 
-  <!-- Who We Serve -->
-  <div id="who-we-serve" style="background:#F8FAFC; padding:96px 0;">
-    <div class="lp-section" style="padding:0;">
-      <div class="container">
-      <h2 class="lp-section-title">Who We Serve</h2>
-      <p class="lp-section-sub">BenefitsGuide works for individuals, families, and organizations alike.</p>
-      <div class="lp-serve-grid">
-        <div class="lp-serve-card lp-fade">
-          <div class="lp-serve-icon">👤</div>
-          <div class="lp-serve-title">Families &amp; Individuals</div>
-          <div class="lp-serve-body">Navigate benefits on your own terms. Phone, online, or in-person. No smartphone or internet required.</div>
-        </div>
-        <div class="lp-serve-card lp-fade">
-          <div class="lp-serve-icon">🏥</div>
-          <div class="lp-serve-title">Health Plans &amp; Systems</div>
-          <div class="lp-serve-body">Reduce staffing costs by 80% while improving member outcomes and closing coverage gaps.</div>
-        </div>
-        <div class="lp-serve-card lp-fade">
-          <div class="lp-serve-icon">🏛️</div>
-          <div class="lp-serve-title">Government &amp; Clinics</div>
-          <div class="lp-serve-body">Close the gap between eligibility and enrollment with 100% closed-loop referrals.</div>
-        </div>
-      </div>
-      </div><!-- end .container -->
-    </div>
-  </div>
-
-  <!-- Testimonials -->
-  <div id="testimonials" class="lp-testi-bg">
-    <div class="lp-testi-wrap">
-      <div class="container">
-      <h2 class="lp-testi-title">What People Are Saying</h2>
-      <div class="lp-testi-grid">
-        <div class="lp-testi-card lp-fade">
-          <div class="lp-testi-bigquote">"</div>
-          <div class="lp-testi-quote">BenefitsGuide walked me through the whole renewal in one phone call. I didn't lose my coverage.</div>
-          <div class="lp-testi-attr">— Maria S., Florida</div>
-        </div>
-        <div class="lp-testi-card lp-fade">
-          <div class="lp-testi-bigquote">"</div>
-          <div class="lp-testi-quote">We reduced our Medicaid renewal workload by 70% using this system. Our staff can now focus on complex cases.</div>
-          <div class="lp-testi-attr">— Community Health Clinic</div>
-        </div>
-        <div class="lp-testi-card lp-fade">
-          <div class="lp-testi-bigquote">"</div>
-          <div class="lp-testi-quote">Finally a tool that works for people who don't have smartphones or read English fluently.</div>
-          <div class="lp-testi-attr">— Social Worker, Boston</div>
-        </div>
-      </div>
-      </div><!-- end .container -->
-    </div>
-  </div>
 
   <!-- Footer -->
   <footer>

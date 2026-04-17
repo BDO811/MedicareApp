@@ -81,26 +81,26 @@ tailwind.config = {
   .lp-mobile-menu a:last-child { border-bottom:none; }
 
   /* Hero */
-  .lp-hero { background:linear-gradient(135deg,#1B4D8E 0%,#1a3a6b 100%); padding:100px 0 80px; text-align:center; }
-  .lp-hero-inner { max-width:700px; margin:0 auto; padding:0 24px; }
+  .lp-hero { background:linear-gradient(135deg,#1B4D8E 0%,#1a3a6b 100%); padding:100px 0 80px; text-align:center; overflow:hidden; }
+  .lp-hero-inner { max-width:680px; width:100%; margin:0 auto; padding:0 32px; box-sizing:border-box; }
   .lp-hero-overline { font-size:11px; font-weight:700; letter-spacing:2px; color:rgba(255,255,255,0.7); text-transform:uppercase; margin-bottom:20px; }
-  .lp-hero-headline { font-size:clamp(2rem,5vw,3.5rem); font-weight:800; color:white; line-height:1.1; margin-bottom:20px; letter-spacing:-1px; }
-  .lp-hero-sub { font-size:clamp(1rem,2.5vw,1.25rem); color:rgba(255,255,255,0.8); line-height:1.65; margin:0 auto 36px; }
+  .lp-hero-headline { font-size:clamp(1.9rem,4.5vw,3.2rem); font-weight:800; color:white; line-height:1.15; margin-bottom:20px; letter-spacing:-0.5px; }
+  .lp-hero-sub { font-size:clamp(0.95rem,2vw,1.15rem); color:rgba(255,255,255,0.8); line-height:1.7; margin:0 auto 36px; max-width:560px; }
   .lp-hero-btns { display:flex; gap:14px; justify-content:center; flex-wrap:wrap; margin-bottom:18px; }
   .lp-btn-primary { background:#2E8B5A; color:white; border:none; padding:16px 30px; border-radius:10px; font-size:17px; font-weight:700; cursor:pointer; transition:background 0.2s,transform 0.1s; display:inline-flex; align-items:center; gap:6px; box-sizing:border-box; }
   .lp-btn-primary:hover { background:#247a4d; transform:translateY(-1px); }
   .lp-btn-outline { background:transparent; color:white; border:2px solid rgba(255,255,255,0.7); padding:14px 28px; border-radius:10px; font-size:16px; font-weight:600; cursor:pointer; transition:all 0.2s; box-sizing:border-box; }
   .lp-btn-outline:hover { background:rgba(255,255,255,0.1); border-color:white; }
   .lp-hero-privacy { font-size:13px; color:rgba(255,255,255,0.6); margin-bottom:36px; }
-  .lp-pills { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }
+  .lp-pills { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; padding:0 16px; }
   .lp-pill { background:rgba(255,255,255,0.12); color:rgba(255,255,255,0.85); font-size:13px; padding:6px 14px; border-radius:20px; border:1px solid rgba(255,255,255,0.2); }
 
   /* Stats bar */
-  .lp-stats { background:#163d70; padding:48px 0; margin-bottom:0; }
-  .lp-stats-inner { max-width:1100px; margin:0 auto; padding:0 24px; display:grid; grid-template-columns:repeat(3,1fr); }
+  .lp-stats { background:#163d70; padding:48px 0; margin-bottom:0; overflow:hidden; }
+  .lp-stats-inner { max-width:900px; width:100%; margin:0 auto; padding:0 32px; box-sizing:border-box; display:grid; grid-template-columns:repeat(3,1fr); }
   .lp-stat { text-align:center; padding:32px 16px; border-right:1px solid rgba(255,255,255,0.2); box-sizing:border-box; }
   .lp-stat:last-child { border-right:none; }
-  .lp-stat-num { font-size:clamp(2.4rem,6vw,3.5rem); font-weight:800; color:white; line-height:1; margin-bottom:8px; }
+  .lp-stat-num { font-size:clamp(2rem,5vw,3rem); font-weight:800; color:white; line-height:1; margin-bottom:8px; }
   .lp-stat-label { font-size:14px; color:rgba(255,255,255,0.7); max-width:160px; margin:0 auto; line-height:1.4; }
 
   /* Sections */
